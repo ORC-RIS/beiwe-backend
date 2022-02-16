@@ -191,7 +191,7 @@ def elevate_researcher(request: ResearcherRequest):
         int(researcher_pk)
     except ValueError:
         return abort(400)
-
+    
     study_pk = request.POST.get("study_id", None)
     assert_admin(request, study_pk)
     edit_researcher = Researcher.get_or_404(pk=researcher_pk)
@@ -201,7 +201,7 @@ def elevate_researcher(request: ResearcherRequest):
         return abort(403)
     StudyRelation.objects.filter(researcher=edit_researcher, study=study) \
         .update(relationship=ResearcherRole.study_admin)
-
+    
     return redirect(
         request.POST.get("redirect_url", None) or f'/edit_researcher/{researcher_pk}'
     )
@@ -290,6 +290,7 @@ def edit_study(request, study_id=None):
             listed_researchers=listed_researchers,
             redirect_url=f'/edit_study/{study_id}',
             timezones=ALL_TIMEZONES_DROPDOWN,
+            page_location="edit_study"
         )
     )
 
