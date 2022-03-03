@@ -137,9 +137,9 @@ def construct_rabbit_mq_security_group_name(eb_environment_name):
 def get_or_create_rabbit_mq_security_group(eb_environment_name):
     rabbit_mq_sec_grp_name = construct_rabbit_mq_security_group_name(eb_environment_name)
     # we assume that the group was created correctly, don't attempt to add rules if we find it
-    try:
-        return get_security_group_by_name(rabbit_mq_sec_grp_name)
-    except InvalidSecurityGroupNameException:
+    
+    security_group = get_security_group_by_name(rabbit_mq_sec_grp_name)
+    if security_group is None:
         log.info("Did not find a security group named '%s,' creating it." % rabbit_mq_sec_grp_name)
         instance_sec_grp_id = get_rds_security_groups_by_eb_name(eb_environment_name)["instance_sec_grp"]['GroupId']
         ingress_params = create_sec_grp_rule_parameters_allowing_traffic_from_another_security_group(
@@ -181,6 +181,7 @@ def create_server(eb_environment_name, aws_server_type, security_groups=None):
             MaxCount=1,
             KeyName=GLOBAL_CONFIGURATION['DEPLOYMENT_KEY_NAME'],
             InstanceType=aws_server_type,
+            SubnetId=GLOBAL_CONFIGURATION['EC2_MANAGER_SUBNET'],
             SecurityGroupIds=security_groups,
             # NetworkInterfaces=[{"DeviceIndex": 0,
             #                     "AssociatePublicIpAddress": True,
@@ -250,7 +251,7 @@ def create_processing_control_server(eb_environment_name, aws_server_type):
 
     # this will fail if there are no security groups (safety check against out of order operations.)
     _ = get_rds_security_groups_by_eb_name(eb_environment_name)["instance_sec_grp"]['GroupId']
-
+    
     manager_info = get_manager_instance_by_eb_environment_name(eb_environment_name)
     if manager_info is not None:
         if manager_info['InstanceType'] == aws_server_type:

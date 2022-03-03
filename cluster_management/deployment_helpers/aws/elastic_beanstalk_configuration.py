@@ -58,21 +58,21 @@ def get_base_eb_configuration():
         },
         
         # deployment network details
-        # {
-        #     'Namespace': 'aws:ec2:vpc',
-        #     'OptionName': 'VPCId',
-        #     'Value': 'vpc-c6e16da2'
-        # },
-        # {
-        #     'Namespace': 'aws:ec2:vpc',
-        #     'OptionName': 'ELBSubnets',
-        #     'Value': 'subnet-10718a66,subnet-ea9599c1,subnet-8018a9bd,subnet-bf1f02e6'
-        # },
-        # {
-        #     'Namespace': 'aws:ec2:vpc',
-        #     'OptionName': 'Subnets',
-        #     'Value': 'subnet-10718a66,subnet-ea9599c1,subnet-8018a9bd,subnet-bf1f02e6'
-        # },
+        {
+            'Namespace': 'aws:ec2:vpc',
+            'OptionName': 'VPCId',
+            'Value': DynamicParameter("VPCId")
+        },
+        {
+            'Namespace': 'aws:ec2:vpc',
+            'OptionName': 'ELBSubnets',
+            'Value': DynamicParameter("ELBSubnets")
+        },
+        {
+            'Namespace': 'aws:ec2:vpc',
+            'OptionName': 'Subnets',
+            'Value': DynamicParameter("Subnets")
+        },
         
         # static network details
         # {   # todo: not in a vpc?
@@ -98,10 +98,10 @@ def get_base_eb_configuration():
             'Namespace': 'aws:autoscaling:asg',
             'OptionName': 'Cooldown',
             'Value': '360'
-        }, {
-            'Namespace': 'aws:autoscaling:asg',
-            'OptionName': 'Custom Availability Zones',
-            'Value': ''
+        #}, {
+        #    'Namespace': 'aws:autoscaling:asg',
+        #    'OptionName': 'Custom Availability Zones',
+        #    'Value': ''
         }, {
             'Namespace': 'aws:autoscaling:asg',
             'OptionName': 'MaxSize',

@@ -12,7 +12,9 @@ from deployment_helpers.constants import (DB_SERVER_TYPE, DBInstanceNotFound,
     RDS_DATABASE_SEC_GROUP_NAME_OVERRIDE, RDS_INSTANCE_SEC_GROUP_NAME_OVERRIDE, RDS_NAME_OVERRIDE)
 from deployment_helpers.general_utils import (current_time_string, EXIT, log,
     random_alphanumeric_starting_with_letter, random_alphanumeric_string)
+from deployment_helpers.constants import get_global_config
 
+GLOBAL_CONFIGURATION = get_global_config()
 
 # t1.micro, m1.small, m1.medium, m1.large, m1.xlarge, m2.xlarge, m2.2xlarge, m2.4xlarge,
 # m3.medium, m3.large, m3.xlarge, m3.2xlarge, m4.large, m4.xlarge, m4.2xlarge, m4.4xlarge,
@@ -230,7 +232,9 @@ def create_new_rds_instance(eb_environment_name):
             VpcSecurityGroupIds=[db_sec_grp_id],
             #TODO: is this even relevant?
             # providing the subnet is critical, not providing this value causes the db to be non-vpc
-            # DBSubnetGroupName='string',
+
+            # using the rds subnet group from global configuration, if provided. Otherwise defaulting to 'default' subnet group
+            DBSubnetGroupName=GLOBAL_CONFIGURATION["RDS_SUBNET_GROUP_NAME"] if GLOBAL_CONFIGURATION["RDS_SUBNET_GROUP_NAME"] is not None else "default",
             
             # db storage
             StorageType='gp2',  # valid options are standard, gp2, io1

@@ -12,7 +12,7 @@ from deployment_helpers.aws.iam import (EnvironmentDeploymentFailure,
     iam_find_instance_profile, iam_find_role, IamEntityMissingError, PythonPlatformDiscoveryError)
 from deployment_helpers.aws.rds import add_eb_environment_to_rds_database_security_group
 from deployment_helpers.aws.s3 import s3_encrypt_bucket
-from deployment_helpers.aws.security_groups import get_security_group_by_name, open_tcp_port
+from deployment_helpers.aws.security_groups import get_security_group_by_id, get_security_group_by_name, open_tcp_port
 from deployment_helpers.constants import (AWS_EB_ENHANCED_HEALTH, AWS_EB_MULTICONTAINER_DOCKER,
     AWS_EB_SERVICE, AWS_EB_WEB_TIER, AWS_EB_WORKER_TIER, BEIWE_APPLICATION_NAME,
     EB_INSTANCE_PROFILE_NAME, EB_INSTANCE_PROFILE_ROLE, EB_SEC_GRP_COUNT_ERROR, EB_SERVICE_ROLE,
@@ -46,6 +46,14 @@ def construct_eb_environment_variables(eb_environment_name):
         "InstanceType": server_settings['ELASTIC_BEANSTALK_INSTANCE_TYPE'],
         "Notification Endpoint": global_config['SYSTEM_ADMINISTRATOR_EMAIL']
     }
+
+    # provide custom network configuration when ELASTIC_BEANSTALK_SUBNETS is specified
+    # TODO: validate also ELASTIC_BEANSTALK_ELB_SUBNETS
+    subnets_config = global_config.get('ELASTIC_BEANSTALK_SUBNETS')
+    if subnets_config and subnets_config.strip():
+        generated_configuration_details["VPCId"] = global_config["VPC_ID"]
+        generated_configuration_details["Subnets"] = global_config["ELASTIC_BEANSTALK_SUBNETS"]
+        generated_configuration_details["ELBSubnets"] = global_config["ELASTIC_BEANSTALK_ELB_SUBNETS"]
 
     configuration = get_base_eb_configuration()
     for option in configuration:
@@ -100,7 +108,7 @@ def get_python38_platform_arn():
 # ancient and terrible, probably good base to start from if we ever want a cli list of environments.
 def get_environments_list():
     environments = create_eb_client().describe_environments()['Environments']
-    return [environment['EnvironmentName'] for environment in environments]
+    return [environment['EnvironmentName'] for environment in environments if environment['Status'] != 'Terminated']
 
 
 ##
@@ -253,7 +261,7 @@ def allow_443_traffic_to_load_balancer(eb_environment_name):
 def allow_eb_environment_database_access(eb_environment_name):
     """ This requires that the database be up and running with its own security groups finalized. """
     eb_sec_grp_name = get_eb_instance_security_group_identifier(eb_environment_name)
-    eb_sec_grp_id = get_security_group_by_name(eb_sec_grp_name)['GroupId']
+    eb_sec_grp_id = get_security_group_by_id(eb_sec_grp_name)['GroupId']
     add_eb_environment_to_rds_database_security_group(eb_environment_name, eb_sec_grp_id)
 
 

@@ -288,7 +288,7 @@ def create_swap():
 def do_fail_if_environment_does_not_exist(name):
     environment_exists = check_if_eb_environment_exists(name)
     if not environment_exists:
-        log.error("There is already an environment named '%s'" % name.lower())
+        log.error("There is no environment named '%s'" % name.lower())
         EXIT(1)
 
 

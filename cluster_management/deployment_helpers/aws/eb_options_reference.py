@@ -39,21 +39,21 @@ discovered = [
         "OptionName": "Cooldown",
         "ValueType": "Scalar"
     },
-    {
-        "DefaultValue": "",
-        "ChangeSeverity": "NoInterruption",
-        "Namespace": "aws:autoscaling:asg",
-        "OptionName": "Custom Availability Zones",
-        "ValueType": "List",
-        "ValueOptions": [
-            "us-east-1a",
-            "us-east-1b",
-            "us-east-1c",
-            "us-east-1d",
-            "us-east-1e",
-            "us-east-1f"
-        ]
-    },
+    # {
+    #     "DefaultValue": "",
+    #     "ChangeSeverity": "NoInterruption",
+    #     "Namespace": "aws:autoscaling:asg",
+    #     "OptionName": "Custom Availability Zones",
+    #     "ValueType": "List",
+    #     "ValueOptions": [
+    #         "us-east-1a",
+    #         "us-east-1b",
+    #         "us-east-1c",
+    #         "us-east-1d",
+    #         "us-east-1e",
+    #         "us-east-1f"
+    #     ]
+    # },
     {
         "Namespace": "aws:autoscaling:launchconfiguration",
         "ValueType": "CommaSeparatedList",

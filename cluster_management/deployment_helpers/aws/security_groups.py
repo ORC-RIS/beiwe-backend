@@ -18,7 +18,12 @@ class InvalidSecurityGroupNameException(Exception): pass
 
 def get_security_group_by_id(sec_grp_id):
     try:
-        return create_ec2_client().describe_security_groups(GroupIds=[sec_grp_id])['SecurityGroups'][0]
+        security_groups = create_ec2_client().describe_security_groups(
+            Filters=[
+                dict(Name='group-id', Values=[sec_grp_id])
+            ]
+        )['SecurityGroups']
+        return security_groups[0] if security_groups else None
     except ClientError as e:
         # Boto3 throws unimportable errors.
         if "Invalid id:" in str(e):
@@ -29,7 +34,12 @@ def get_security_group_by_id(sec_grp_id):
 
 def get_security_group_by_name(sec_grp_name):
     try:
-        return create_ec2_client().describe_security_groups(GroupNames=[sec_grp_name])['SecurityGroups'][0]
+        security_groups = create_ec2_client().describe_security_groups(
+            Filters=[
+                dict(Name='group-name', Values=[sec_grp_name])
+            ]
+        )['SecurityGroups']
+        return security_groups[0] if security_groups else None
     except ClientError as e:
         # Boto3 throws unimportable errors.
         if "InvalidGroup.NotFound" in str(e):
