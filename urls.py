@@ -226,6 +226,10 @@ urlpatterns = [
         study_api.edit_intervention,
         name="study_api.edit_intervention"),
     path(
+        'download_study_intervention_history/<str:study_id>',
+        study_api.download_study_interventions,
+        name="study_api.download_study_interventions"),
+    path(
         'study_fields/<str:study_id>',
         study_api.study_fields,
         name="study_api.study_fields"),
@@ -323,7 +327,11 @@ urlpatterns = [
         "get-users/v1",
         other_researcher_apis.get_users_in_study,
         name="other_researcher_apis.get_users_in_study"),
-    
+    path(
+        "get-interventions/v1",
+        other_researcher_apis.download_study_interventions,
+        name="other_researcher_apis.download_study_interventions"),
+
     # data_access_api
     path(
         "get-data/v1",

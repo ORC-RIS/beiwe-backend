@@ -1,19 +1,27 @@
+import subprocess
 from datetime import date, datetime
 
+from django.http.response import HttpResponse
 from django.utils import timezone
 
+from config.django_settings import STATIC_ROOT
 from constants.celery_constants import ScheduleTypes
+from constants.common_constants import BEIWE_PROJECT_ROOT
 from constants.forest_constants import ForestTree
 from constants.researcher_constants import ResearcherRole
 from constants.testing_constants import REAL_ROLES, ResearcherRole
 from database.common_models import generate_objectid_string
 from database.data_access_models import ChunkRegistry, FileToProcess
-from database.schedule_models import ArchivedEvent, Intervention, InterventionDate
+from database.schedule_models import AbsoluteSchedule, ArchivedEvent, Intervention, InterventionDate, RelativeSchedule, WeeklySchedule
 from database.study_models import DeviceSettings, Study, StudyField
 from database.survey_models import Survey
 from database.tableau_api_models import ForestParam, ForestTask
 from database.user_models import Participant, Researcher, StudyRelation
 from libs.security import generate_easy_alphanumeric_string
+
+
+CURRENT_TEST_HTML_FILEPATH = BEIWE_PROJECT_ROOT + "private/current_test_page.html"
+ABS_STATIC_ROOT = (BEIWE_PROJECT_ROOT + STATIC_ROOT).encode()
 
 
 class ReferenceObjectMixin:
@@ -24,9 +32,12 @@ class ReferenceObjectMixin:
     DEFAULT_RESEARCHER_PASSWORD = "abcABC123!@#"
     DEFAULT_STUDY_NAME = "session_study"
     DEFAULT_SURVEY_OBJECT_ID = 'u1Z3SH7l2xNsw72hN3LnYi96'
-    DEFAULT_PARTICIPANT_NAME = "particip"  # has to be 8 characters
+    DEFAULT_PARTICIPANT_NAME = "patient1"  # has to be 8 characters
     DEFAULT_PARTICIPANT_PASSWORD = "abcABC123"
     DEFAULT_PARTICIPANT_DEVICE_ID = "default_device_id"
+    DEFAULT_INTERVENTION_NAME = "default_intervention_name"
+    # this should be okay even though it changes.
+    DEFAULT_DATE = timezone.now().today().date()
     
     # For all defaults make sure to maintain the pattern that includes the use of the save function,
     # this codebase implements a special save function that validates before passing through.
@@ -127,7 +138,6 @@ class ReferenceObjectMixin:
             password='zsk387ts02hDMRAALwL2SL3nVHFgMs84UcZRYIQWYNQ=',
             salt='hllJauvRYDJMQpXQKzTdwQ==',  # these will get immediately overwritten
             site_admin=relation_to_session_study == ResearcherRole.site_admin,
-            is_batch_user=False,
         )
         # set password saves...
         researcher.set_password(self.DEFAULT_RESEARCHER_PASSWORD)
@@ -167,6 +177,10 @@ class ReferenceObjectMixin:
         """ Providing the comment about using the save() pattern is observed, this cannot fail. """
         return self.session_study.device_settings
     
+    @property
+    def default_intervention(self) -> Intervention:
+        return self.generate_intervention(self.session_study, self.DEFAULT_INTERVENTION_NAME)
+    
     def generate_intervention(self, study: Study, name: str) -> Intervention:
         intervention = Intervention(study=study, name=name)
         intervention.save()
@@ -204,11 +218,15 @@ class ReferenceObjectMixin:
         participant.set_password(self.DEFAULT_PARTICIPANT_PASSWORD)  # saves
         return participant
     
+    @property
+    def default_populated_intervention_date(self) -> InterventionDate:
+        return self.generate_intervention_date(self.default_participant, self.default_intervention)
+    
     def generate_intervention_date(
         self, participant: Participant, intervention: Intervention, date: date = None
     ) -> InterventionDate:
         intervention_date = InterventionDate(
-            participant=participant, intervention=intervention, date=date or timezone.now().today()
+            participant=participant, intervention=intervention, date=date or self.DEFAULT_DATE
         )
         intervention_date.save()
         return intervention_date
@@ -234,6 +252,9 @@ class ReferenceObjectMixin:
     #         scheduled_time
     #     )
     
+    #
+    # schedule and schedule-adjacent objects
+    #
     def generate_archived_event(
         self, survey: Survey, participant: Participant, schedule_type: str = None,
         scheduled_time: datetime = None, response_time: datetime = None, status: str = None
@@ -248,6 +269,47 @@ class ReferenceObjectMixin:
         )
         archived_event.save()
         return archived_event
+    
+    def generate_weekly_schedule(
+        self, survey: Survey = None, day_of_week: int = 0, hour: int = 0, minute: int = 0
+    ) -> WeeklySchedule:
+        weekly = WeeklySchedule(
+            survey=survey or self.default_survey,
+            day_of_week=day_of_week,
+            hour=hour,
+        )
+        weekly.save()
+        return weekly
+    
+    @property
+    def default_relative_schedule(self) -> RelativeSchedule:
+        return self.generate_relative_schedule(self.default_survey, self.default_intervention)
+    
+    def generate_relative_schedule(
+        self, survey: Survey, intervention: Intervention, days_after: int = 0,
+        hour: int = 0, minute :int = 0,
+    ) -> RelativeSchedule:
+        relative = RelativeSchedule(
+            survey=survey or self.default_survey,
+            intervention=intervention or self.default_intervention,
+            days_after=days_after,
+            hour=hour,
+            minute=minute,
+        )
+        relative.save()
+        return relative
+    
+    def generate_absolute_schedule(
+        self, a_date: date, survey: Survey = None, hour: int = 0, minute: int = 0,
+    ) -> RelativeSchedule:
+        absolute = AbsoluteSchedule(
+            survey=survey or self.default_survey,
+            date=a_date,
+            hour=hour,
+            minute=minute,
+        )
+        absolute.save()
+        return absolute
     
     #
     ## Forest objects
@@ -264,7 +326,7 @@ class ReferenceObjectMixin:
         # there is an actual default ForestParams defined in a migration.
         self._default_forest_params = ForestParam.objects.get(default=True)
         return self._default_forest_params
-
+    
     def generate_forest_task(
         self,
         participant: Participant = None,
@@ -284,8 +346,8 @@ class ReferenceObjectMixin:
         )
         task.save()
         return task
-
-
+    
+    
     #
     ## ChunkRegistry
     #
@@ -372,3 +434,13 @@ class DummyThreadPool():
     # @staticmethod
     def close(self):
         pass
+
+
+def render_test_html_file(response: HttpResponse, url: str):
+    print("\nwriting url:", url)
+    
+    with open(CURRENT_TEST_HTML_FILEPATH, "wb") as f:
+        f.write(response.content.replace(b"/static/", ABS_STATIC_ROOT))
+    
+    subprocess.check_call(["google-chrome", CURRENT_TEST_HTML_FILEPATH])
+    input(f"opening {url} rendered html, press enter to continue test(s)")

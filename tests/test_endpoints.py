@@ -17,6 +17,7 @@ from config.jinja2 import easy_url
 from constants.celery_constants import (ANDROID_FIREBASE_CREDENTIALS, BACKEND_FIREBASE_CREDENTIALS,
     IOS_FIREBASE_CREDENTIALS)
 from constants.common_constants import BEIWE_PROJECT_ROOT
+from constants.dashboard_constants import COMPLETE_DATA_STREAM_DICT
 from constants.data_stream_constants import ALL_DATA_STREAMS, SURVEY_TIMINGS
 from constants.datetime_constants import API_DATE_FORMAT
 from constants.message_strings import (NEW_PASSWORD_8_LONG, NEW_PASSWORD_MISMATCH,
@@ -36,7 +37,7 @@ from database.user_models import Participant, ParticipantFCMHistory, Researcher
 from libs.copy_study import format_study
 from libs.encryption import get_RSA_cipher
 from libs.security import generate_easy_alphanumeric_string
-from tests.common import (BasicSessionTestCase, DataApiTest, ParticipantSessionTest,
+from tests.common import (BasicSessionTestCase, CommonTestCase, DataApiTest, ParticipantSessionTest,
     RedirectSessionApiTest, ResearcherSessionTest, SmartRequestsTestCase)
 from tests.helpers import DummyThreadPool
 
@@ -316,10 +317,14 @@ class TestDashboard(ResearcherSessionTest):
     ENDPOINT_NAME = "dashboard_api.dashboard_page"
     
     def test_dashboard(self):
+        self.default_participant
         # default user and default study already instantiated
         self.set_session_study_relation(ResearcherRole.researcher)
         resp = self.smart_get_status_code(200, str(self.session_study.id))
         self.assert_present("Choose a participant or data stream to view", resp.content)
+        self.assert_present(self.DEFAULT_PARTICIPANT_NAME, resp.content)
+        for data_stream_text in COMPLETE_DATA_STREAM_DICT.values():
+            self.assert_present(data_stream_text, resp.content)
 
 
 # FIXME: dashboard is going to require a fixture to populate data.
@@ -330,9 +335,11 @@ class TestDashboardStream(ResearcherSessionTest):
     # dashboard_api.get_data_for_dashboard_datastream_display
     def test_data_streams(self):
         # test is currently limited to rendering the page for each data stream but with no data in it
+        self.default_participant
         self.set_session_study_relation()
         for data_stream in ALL_DATA_STREAMS:
-            self.smart_get_status_code(200, self.session_study.id, data_stream)
+            resp = self.smart_get_status_code(200, self.session_study.id, data_stream)
+            self.assert_present(COMPLETE_DATA_STREAM_DICT[data_stream], resp.content)
 
 
 # FIXME: this page renders with almost no data
@@ -1804,9 +1811,6 @@ class TestGetUsersInStudy(DataApiTest):
     ENDPOINT_NAME = "other_researcher_apis.get_users_in_study"
     
     def test_no_participants(self):
-        self.smart_post_status_code(200)
-    
-    def test_no_participants(self):
         self.set_session_study_relation(ResearcherRole.researcher)
         resp = self.smart_post_status_code(200, study_id=self.session_study.object_id)
         self.assertEqual(resp.content, b"[]")
@@ -1829,6 +1833,26 @@ class TestGetUsersInStudy(DataApiTest):
             self.assertEqual(resp.content, match.encode())
         except AssertionError:
             self.assertEqual(resp.content, match2.encode())
+
+
+class TestDownloadStudyInterventions(DataApiTest):
+    ENDPOINT_NAME = "other_researcher_apis.download_study_interventions"
+    
+    def test_no_interventions(self):
+        self.set_session_study_relation(ResearcherRole.researcher)
+        resp = self.smart_post_status_code(200, study_id=self.session_study.object_id)
+        self.assertEqual(resp.content, b"{}")
+    
+    def test_survey_with_one_intervention(self):
+        self.set_session_study_relation(ResearcherRole.researcher)
+        self.default_populated_intervention_date
+        self.default_relative_schedule
+        resp = self.smart_post_status_code(200, study_id=self.session_study.object_id)
+        json_unpacked = json.loads(resp.content)
+        correct_output = {self.DEFAULT_PARTICIPANT_NAME:
+                            {self.DEFAULT_SURVEY_OBJECT_ID:
+                                {self.DEFAULT_INTERVENTION_NAME: self.DEFAULT_DATE.isoformat()}}}
+        self.assertDictEqual(json_unpacked, correct_output)
 
 
 class TestGetData(DataApiTest):
@@ -1858,57 +1882,63 @@ class TestGetData(DataApiTest):
     # retain and usethis structure in order to force a test addition on a new file type.
     # "particip" is the DEFAULT_PARTICIPANT_NAME
     # 'u1Z3SH7l2xNsw72hN3LnYi96' is the  DEFAULT_SURVEY_OBJECT_ID
+    PATIENT_NAME = CommonTestCase.DEFAULT_PARTICIPANT_NAME
     FILE_NAMES = {                                        # ↓ that Z makes it a timzone'd datetime
         "accelerometer": ("something.csv", "2020-10-05 02:00Z",
-                         f"particip/accelerometer/2020-10-05 02_00_00+00_00.csv"),
+                         f"{PATIENT_NAME}/accelerometer/2020-10-05 02_00_00+00_00.csv"),
         "ambient_audio": ("something.mp4", "2020-10-05 02:00Z",
-                         f"particip/ambient_audio/2020-10-05 02_00_00+00_00.mp4"),
+                         f"{PATIENT_NAME}/ambient_audio/2020-10-05 02_00_00+00_00.mp4"),
         "app_log": ("app_log.csv", "2020-10-05 02:00Z",
-                         f"particip/app_log/2020-10-05 02_00_00+00_00.csv"),
+                         f"{PATIENT_NAME}/app_log/2020-10-05 02_00_00+00_00.csv"),
         "bluetooth": ("bluetooth.csv", "2020-10-05 02:00Z",
-                         f"particip/bluetooth/2020-10-05 02_00_00+00_00.csv"),
+                         f"{PATIENT_NAME}/bluetooth/2020-10-05 02_00_00+00_00.csv"),
         "calls": ("calls.csv", "2020-10-05 02:00Z",
-                         f"particip/calls/2020-10-05 02_00_00+00_00.csv"),
+                         f"{PATIENT_NAME}/calls/2020-10-05 02_00_00+00_00.csv"),
         "devicemotion": ("devicemotion.csv", "2020-10-05 02:00Z",
-                         f"particip/devicemotion/2020-10-05 02_00_00+00_00.csv"),
+                         f"{PATIENT_NAME}/devicemotion/2020-10-05 02_00_00+00_00.csv"),
         "gps": ("gps.csv", "2020-10-05 02:00Z",
-                         f"particip/gps/2020-10-05 02_00_00+00_00.csv"),
+                         f"{PATIENT_NAME}/gps/2020-10-05 02_00_00+00_00.csv"),
         "gyro": ("gyro.csv", "2020-10-05 02:00Z",
-                         f"particip/gyro/2020-10-05 02_00_00+00_00.csv"),
+                         f"{PATIENT_NAME}/gyro/2020-10-05 02_00_00+00_00.csv"),
         "identifiers": ("identifiers.csv", "2020-10-05 02:00Z",
-                         f"particip/identifiers/2020-10-05 02_00_00+00_00.csv"),
+                         f"{PATIENT_NAME}/identifiers/2020-10-05 02_00_00+00_00.csv"),
         "image_survey": ("image_survey/survey_obj_id/something/something2.csv", "2020-10-05 02:00Z",
                          # patient_id/data_type/survey_id/survey_instance/name.csv
-                         f"particip/image_survey/survey_obj_id/something/something2.csv"),
+                         f"{PATIENT_NAME}/image_survey/survey_obj_id/something/something2.csv"),
         "ios_log": ("ios_log.csv", "2020-10-05 02:00Z",
-                         f"particip/ios_log/2020-10-05 02_00_00+00_00.csv"),
+                         f"{PATIENT_NAME}/ios_log/2020-10-05 02_00_00+00_00.csv"),
         "magnetometer": ("magnetometer.csv", "2020-10-05 02:00Z",
-                         f"particip/magnetometer/2020-10-05 02_00_00+00_00.csv"),
+                         f"{PATIENT_NAME}/magnetometer/2020-10-05 02_00_00+00_00.csv"),
         "power_state": ("power_state.csv", "2020-10-05 02:00Z",
-                         f"particip/power_state/2020-10-05 02_00_00+00_00.csv"),
+                         f"{PATIENT_NAME}/power_state/2020-10-05 02_00_00+00_00.csv"),
         "proximity": ("proximity.csv", "2020-10-05 02:00Z",
-                         f"particip/proximity/2020-10-05 02_00_00+00_00.csv"),
+                         f"{PATIENT_NAME}/proximity/2020-10-05 02_00_00+00_00.csv"),
         "reachability": ("reachability.csv", "2020-10-05 02:00Z",
-                         f"particip/reachability/2020-10-05 02_00_00+00_00.csv"),
+                         f"{PATIENT_NAME}/reachability/2020-10-05 02_00_00+00_00.csv"),
         "survey_answers": ("survey_obj_id/something2/something3.csv", "2020-10-05 02:00Z",
                           # expecting: patient_id/data_type/survey_id/time.csv
-                         f"particip/survey_answers/something2/2020-10-05 02_00_00+00_00.csv"),
+                         f"{PATIENT_NAME}/survey_answers/something2/2020-10-05 02_00_00+00_00.csv"),
         "survey_timings": ("something1/something2/something3/something4/something5.csv", "2020-10-05 02:00Z",
                           # expecting: patient_id/data_type/survey_id/time.csv
-                          f"particip/survey_timings/u1Z3SH7l2xNsw72hN3LnYi96/2020-10-05 02_00_00+00_00.csv"),
+                          f"{PATIENT_NAME}/survey_timings/u1Z3SH7l2xNsw72hN3LnYi96/2020-10-05 02_00_00+00_00.csv"),
         "texts": ("texts.csv", "2020-10-05 02:00Z",
-                         f"particip/texts/2020-10-05 02_00_00+00_00.csv"),
+                         f"{PATIENT_NAME}/texts/2020-10-05 02_00_00+00_00.csv"),
         "audio_recordings": ("audio_recordings.wav", "2020-10-05 02:00Z",
-                         f"particip/audio_recordings/2020-10-05 02_00_00+00_00.wav"),
+                         f"{PATIENT_NAME}/audio_recordings/2020-10-05 02_00_00+00_00.wav"),
         "wifi": ("wifi.csv", "2020-10-05 02:00Z",
-                         f"particip/wifi/2020-10-05 02_00_00+00_00.csv"),
+                         f"{PATIENT_NAME}/wifi/2020-10-05 02_00_00+00_00.csv"),
         }
     
     # setting the threadpool needs to apply to each test, following this pattern because its easy.
     @patch("libs.streaming_zip.ThreadPool")
     def test_basics(self, threadpool: MagicMock):
         threadpool.return_value = DummyThreadPool()
-        self._test_basics()
+        self._test_basics(as_site_admin=False)
+    
+    @patch("libs.streaming_zip.ThreadPool")
+    def test_basics_as_site_admin(self, threadpool: MagicMock):
+        threadpool.return_value = DummyThreadPool()
+        self._test_basics(as_site_admin=True)
     
     @patch("libs.streaming_zip.ThreadPool")
     def test_downloads_and_file_naming(self, threadpool: MagicMock):
@@ -1947,7 +1977,7 @@ class TestGetData(DataApiTest):
             self._test_downloads_and_file_naming()
         except AssertionError as e:
             # this will happen on the first file it tests, accelerometer.
-            literal_string_of_error_message = "b'particip/accelerometer/2020-10-05 " \
+            literal_string_of_error_message = f"b'{self.PATIENT_NAME}/accelerometer/2020-10-05 " \
                 "02_00_00+00_00.csv' not found in b'PK\\x05\\x06\\x00\\x00\\x00\\x00\\x00" \
                 "\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00'"
             
@@ -1958,8 +1988,11 @@ class TestGetData(DataApiTest):
                      "threading via a ThreadPool or DummyThreadPool"
                 )
     
-    def _test_basics(self):
-        self.set_session_study_relation(ResearcherRole.researcher)
+    def _test_basics(self, as_site_admin: bool):
+        if as_site_admin:
+            self.session_researcher.update(site_admin=True)
+        else:
+            self.set_session_study_relation(ResearcherRole.researcher)
         resp: FileResponse = self.smart_post(study_pk=self.session_study.id, web_form="anything")
         self.assertEqual(resp.status_code, 200)
         for i, file_bytes in enumerate(resp.streaming_content, start=1):

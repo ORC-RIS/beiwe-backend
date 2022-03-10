@@ -3,9 +3,9 @@ import json
 import plistlib
 import time
 
-from django.core.exceptions import ValidationError
 from django.core.files.base import ContentFile
 from django.core.files.uploadedfile import InMemoryUploadedFile, TemporaryUploadedFile
+from django.db import IntegrityError
 from django.http.response import HttpResponse
 from django.utils import timezone
 
@@ -19,6 +19,7 @@ from constants.message_strings import (DECRYPTION_KEY_ADDITIONAL_MESSAGE,
 from database.data_access_models import FileToProcess
 from database.profiling_models import DecryptionKeyError, UploadTracking
 from database.system_models import FileAsText
+from database.user_models import Participant
 from libs.encryption import decrypt_device_file, DecryptionKeyInvalidError, HandledError
 from libs.http_utils import determine_os_api
 from libs.internal_types import ParticipantRequest
@@ -53,13 +54,11 @@ def upload(request: ParticipantRequest, OS_API=""):
     In the event of a single line being undecryptable (can happen due to io errors on the device)
     we drop only that line (and store the erroring line in an attempt to track it down.
 
-    A 400 error means there is something is wrong with the uploaded file or its parameters,
-    administrators will be emailed regarding this upload, the event will be logged to the apache
-    log.  The app should not delete the file, it should try to upload it again at some point.
+    A 400 error means there is something is wrong with the uploaded file or its parameter.
+    The app should not delete the file, it should try to upload it again at some point.
 
-    If a 500 error occurs that means there is something wrong server side, administrators will be
-    emailed and the event will be logged. The app should not delete the file, it should try to
-    upload it again at some point.
+    If a 500 error occurs that means there is something wrong server side. The app should not delete
+    the file, it should try to upload it again at some point.
 
     Request format:
     send an http post request to [domain name]/upload, remember to include security
@@ -113,6 +112,13 @@ def upload(request: ParticipantRequest, OS_API=""):
             }
             sentry_client = make_sentry_client(SentryTypes.elastic_beanstalk, tags)
             sentry_client.captureMessage(DECRYPTION_KEY_ERROR_MESSAGE)
+        
+        if OS_API == Participant.IOS_API:
+            # this is an experiment, unlike Android, IOS will reencrypt data with a different key.
+            # In an attempt to get ios data of better quality we will reject as 500 error all
+            # bad decryption keys sourced from ios.
+            return abort(400)
+        
         return HttpResponse(status=200)
     
     # if uploaded data actually exists, and has a valid extension
@@ -126,14 +132,11 @@ def upload(request: ParticipantRequest, OS_API=""):
             FileToProcess.append_file_for_processing(
                 s3_file_location, participant.study.object_id, participant=participant
             )
-        except ValidationError as e:
-            # Real error is a second validation inside e.error_dict["s3_file_path"].
-            # Ew; just test for this string instead...
-            if S3_FILE_PATH_UNIQUE_CONSTRAINT_ERROR in str(e):
-                # this tells the device to just move on to the next file, try again later.
-                return abort(500)
-            else:
+        except IntegrityError as e:
+            # (This was a ValidationError for ages.) Only handle the unique constraint condition.
+            if S3_FILE_PATH_UNIQUE_CONSTRAINT_ERROR not in str(e):
                 raise
+            return abort(400)
         
         UploadTracking.objects.create(
             file_path=s3_file_location,
@@ -165,7 +168,7 @@ def get_uploaded_file(request: ParticipantRequest):
     else:
         # no uploaded file, is a bad request.
         return abort(400)
-
+    
     # okay for some reason we get different file-like types in different scenarios?
     if isinstance(uploaded_file, (ContentFile, InMemoryUploadedFile, TemporaryUploadedFile)):
         uploaded_file = uploaded_file.read()

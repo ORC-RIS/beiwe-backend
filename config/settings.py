@@ -47,7 +47,7 @@ SENTRY_JAVASCRIPT_DSN = getenv("SENTRY_JAVASCRIPT_DSN")
 S3_REGION_NAME = getenv("S3_REGION_NAME", "us-east-1")
 
 # Location of the downloadable Android APK file that'll be served from /download
-DOWNLOADABLE_APK_URL = getenv("DOWNLOADABLE_APK_URL", "https://play.google.com/store/apps/details?id=org.beiwe.app&hl=en_US&gl=US")
+DOWNLOADABLE_APK_URL = getenv("DOWNLOADABLE_APK_URL", "https://beiwe-app-backups.s3.amazonaws.com/release/Beiwe-LATEST-commStatsCustomUrl.apk")
 
 #
 # File processing options
@@ -64,7 +64,7 @@ CONCURRENT_NETWORK_OPS = getenv("CONCURRENT_NETWORK_OPS") or cpu_count() * 2
 # therefore S3 costs), but will use more memory. Individual file size ranges from bytes to tens of
 # megabytes, so memory usage can be spikey and difficult to predict.
 #   Expects an integer number.
-FILE_PROCESS_PAGE_SIZE = getenv("FILE_PROCESS_PAGE_SIZE", 250)
+FILE_PROCESS_PAGE_SIZE = getenv("FILE_PROCESS_PAGE_SIZE", 100)
 
 #
 # Push Notification directives

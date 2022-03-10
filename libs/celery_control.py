@@ -39,12 +39,12 @@ class CeleryNotRunningException(Exception): pass
 class FalseCeleryApp:
     """ Class that mimics enough functionality of a Celery app for us to be able to execute
     our celery infrastructure from the shell, single-threaded, without queuing. """
-
+    
     def __init__(self, an_function: callable):
         """ at instantiation (aka when used as a decorator) stash the function we wrap """
         print(f"Instantiating a FalseCeleryApp for {an_function.__name__}.")
         self.an_function = an_function
-
+    
     @staticmethod
     def task(*args, **kwargs):
         """ Our pattern is that we wrap our celery functions in the task decorator.
@@ -53,7 +53,7 @@ class FalseCeleryApp:
         that does nothing but returns a FalseCelery app. """
         print(f"task declared, args: {args}, kwargs:{kwargs}")
         return FalseCeleryApp
-
+    
     def apply_async(self, *args, **kwargs):
         """ apply_async is the function we use to queue up tasks.  Our hack is to declare
         our own apply_async function that extracts the "args" parameter.  We pass those
@@ -68,14 +68,25 @@ class FalseCeleryApp:
 # Connections to Celery (or FalseCeleryApps if Celery is not present)
 #
 
+FORCE_CELERY_OFF = False
+
+
 def instantiate_celery_app_connection(service_name: str) -> Celery or FalseCeleryApp:
+    # this isn't viable because it breaks watch_processing (etc), because the celery.task.inspect
+    # call will time out if no Celery object has been instantiated with credentials.
+    # if RUNNING_TEST_OR_IN_A_SHELL:
+    # return FalseCeleryApp
+    
+    if FORCE_CELERY_OFF:
+        return FalseCeleryApp
+    
     # the location of the manager_ip credentials file is in the folder above the project folder.
     try:
         with open(CELERY_CONFIG_LOCATION, 'r') as f:
             manager_ip, password = f.read().splitlines()
     except IOError:
         return FalseCeleryApp
-
+    
     return Celery(
         service_name,
         # note that the 2nd trailing slash here is required, it is some default rabbitmq thing.
@@ -100,22 +111,28 @@ forest_celery_app = instantiate_celery_app_connection(FOREST_SERVICE)
 def inspect():
     """ Inspect is annoyingly unreliable and has a default 1 second timeout.
         Will error if executed while a FalseCeleryApp is in use. """
-    if isinstance(processing_celery_app, FalseCeleryApp) or isinstance(push_send_celery_app, FalseCeleryApp):
+    
+    # this function intentionally breaks if you every instantiated a false celery app
+    if (
+        isinstance(processing_celery_app, FalseCeleryApp)
+        or isinstance(push_send_celery_app, FalseCeleryApp)
+        or isinstance(forest_celery_app, FalseCeleryApp)
+    ):
         raise CeleryNotRunningException("FalseCeleryApp is in use, this session is not connected to celery.")
-
+    
     # this import needs to come after the celery app is loaded, the class is dynamic
     # and the inspect function is injected, it is not present in the source.
     from celery.task.control import inspect as celery_inspect
     now = timezone.now()
     fail_time = now + timedelta(seconds=20)
-
+    
     while now < fail_time:
         try:
             return celery_inspect(timeout=0.1)
         except CeleryNotRunningException:
             now = timezone.now()
             continue
-
+    
     raise CeleryNotRunningException()
 
 
@@ -175,17 +192,17 @@ def _get_job_ids(celery_query_dict, celery_app_suffix):
           'redelivered': False},
          'worker_pid': 27292}]}
     """
-
+    
     # for when celery isn't running
     if celery_query_dict is None:
         raise CeleryNotRunningException()
-
+    
     # below could be substantially improved. itertools chain....
     all_processing_jobs = []
     for worker_name, list_of_jobs in celery_query_dict.items():
         if worker_name.endswith(celery_app_suffix):
             all_processing_jobs.extend(list_of_jobs)
-
+    
     all_args = []
     for job_arg in [job['args'] for job in all_processing_jobs]:
         # 2020-11-24:: this job_arg value has started to return a list object, not a json string
@@ -196,5 +213,5 @@ def _get_job_ids(celery_query_dict, celery_app_suffix):
         assert len(args) == 1
         assert isinstance(args[0], int)
         all_args.append(args[0])
-
+    
     return all_args

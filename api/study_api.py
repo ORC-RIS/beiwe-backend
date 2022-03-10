@@ -7,7 +7,8 @@ from django.db.models.fields import BooleanField
 from django.db.models.functions.text import Lower
 from django.db.models.query import Prefetch
 from django.db.models.query_utils import Q
-from django.shortcuts import HttpResponse, redirect, render
+from django.http import FileResponse, HttpResponse
+from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
 from authentication.admin_authentication import authenticate_researcher_study_access
@@ -16,6 +17,7 @@ from database.schedule_models import Intervention, InterventionDate
 from database.study_models import Study, StudyField
 from database.user_models import Participant, ParticipantFieldValue
 from libs.internal_types import ResearcherRequest
+from libs.intervention_export import intervention_survey_data
 
 
 @require_GET
@@ -67,6 +69,21 @@ def interventions_page(request: ResearcherRequest, study_id=None):
             InterventionDate.objects.get_or_create(participant=participant, intervention=intervention)
     
     return redirect(f'/interventions/{study.id}')
+
+
+@require_http_methods(['GET', 'POST'])
+@authenticate_researcher_study_access
+def download_study_interventions(request: ResearcherRequest, study_id=None):
+    study = get_object_or_404(Study, id=study_id)
+    data = intervention_survey_data(study)
+    fr = FileResponse(
+        json.dumps(data),
+        content_type="text/json",
+        as_attachment=True,
+        filename=f"{study.object_id}_intervention_data.json",
+    )
+    fr.set_headers(None)  # django is kinda stupid? buh?
+    return fr
 
 
 @require_POST
